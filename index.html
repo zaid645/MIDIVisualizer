@@ -26,7 +26,6 @@
     <!-- Sidebar UI -->
     <aside class="w-full md:w-80 bg-slate-900 border-r border-slate-700 flex flex-col h-full z-10 shadow-xl overflow-hidden shrink-0">
        
-
         <div class="flex-1 overflow-y-auto p-4 space-y-4">
             <div class="p-4 border-b border-slate-700 shrink-0">
                 <h1 class="text-xl font-bold text-blue-400">MIDI Vis Pro</h1>
@@ -115,6 +114,37 @@
                 </div>
             </div>
 
+            <!-- SECTION: Visual Effects (Experimental) -->
+            <div class="space-y-2 border-t border-slate-700 pt-3">
+                <h4 class="text-xs font-bold text-emerald-400 mb-2 uppercase">Efek Visual (Experimental)</h4>
+                <div class="flex flex-col space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="toggle-waveform" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded">
+                        <label for="toggle-waveform" class="text-xs font-medium text-slate-300">Audio Waveform (WebAudio)</label>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="toggle-particles" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" checked>
+                        <label for="toggle-particles" class="text-xs font-medium text-slate-300">Ledakan Partikel (Burst)</label>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="toggle-neon" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" checked>
+                        <label for="toggle-neon" class="text-xs font-medium text-slate-300">Efek Cahaya Neon</label>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="toggle-velocity" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" checked>
+                        <label for="toggle-velocity" class="text-xs font-medium text-slate-300">Dinamika Kecepatan (Velocity)</label>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="toggle-watermark" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded">
+                        <label for="toggle-watermark" class="text-xs font-medium text-slate-300">Tampilkan Watermark</label>
+                    </div>
+                    <div id="watermark-input-container" class="hidden mt-1 pl-6">
+                        <input type="file" id="watermark-image-input" accept="image/*" class="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 bg-slate-800 rounded-md text-slate-300">
+                        <p class="text-[10px] text-slate-400 mt-1">Saran: Gunakan logo PNG transparan.</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="space-y-2 border-t border-slate-700 pt-3 shrink-0">
                 <div class="flex gap-2">
                     <button id="btn-play" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-sm transition-colors disabled:opacity-50" disabled>▶ Mainkan</button>
@@ -159,7 +189,7 @@
     <script>
         /**
          * ==========================================
-         * MODUL 1: APP STATE (Manajemen State Global)
+         * MODUL 1: APP STATE
          * ==========================================
          */
         const AppState = {
@@ -171,30 +201,40 @@
             cancelRequested: false,
             animationFrameId: null,
             
-            // Konfigurasi Visual & Render
             orientation: 'horizontal',
             speed: 400,
             resolution: 360,
             fps: 30,
-            layerNotes: true, // State untuk fitur layering not (tumpukan)
+            layerNotes: true, 
             
-            // Teks
             titleText: '',
             subtitleText: '',
 
-            // Konstanta Piano
+            visual_toggles: {
+                showWaveform: false,
+                showParticles: true,
+                enableNeonGlow: true,
+                useVelocityColors: true,
+                showWatermark: false
+            },
+            watermark_image: null,
+            particles_pool: [],
+
+            audioCtx: null,
+            analyser: null,
+            dataArray: null,
+
             MIN_MIDI: 21,
             MAX_MIDI: 108,
             get TOTAL_KEYS() { return this.MAX_MIDI - this.MIN_MIDI + 1; },
 
-            // File blobs
             finalVideoBlob: null,
             finalAudioVideoBlob: null
         };
 
         /**
          * ==========================================
-         * MODUL 2: UTILS (Fungsi Bantuan & Log)
+         * MODUL 2: UTILS
          * ==========================================
          */
         const Utils = {
@@ -228,12 +268,20 @@
                     btnPlay.disabled = false;
                     btnExport.disabled = false;
                 }
+            },
+
+            resetNoteParticleFlags() {
+                if(!AppState.parsedMidi) return;
+                AppState.parsedMidi.tracks.forEach(track => {
+                    track.notes.forEach(note => { note._particleFired = false; });
+                });
+                AppState.particles_pool = [];
             }
         };
 
         /**
          * ==========================================
-         * MODUL 3: RENDERER (Mesin Visual Canvas)
+         * MODUL 3: RENDERER
          * ==========================================
          */
         const Renderer = {
@@ -254,29 +302,26 @@
                 const { width, height } = this.updateCanvasSize();
                 const isHorizontal = AppState.orientation === 'horizontal';
 
-                // Bersihkan Background
                 this.ctx.fillStyle = '#0a0a0a';
                 this.ctx.fillRect(0, 0, width, height);
 
+                this._drawWaveformBackground(width, height);
+
                 if (!AppState.parsedMidi) return;
 
-                // Hitung Rasio dan Skala
                 const keySize = isHorizontal ? (height / AppState.TOTAL_KEYS) : (width / AppState.TOTAL_KEYS);
                 const pixelsPerSecond = AppState.speed * (height / 1080);
 
-                // Hit Line (Garis Piano)
                 this.ctx.strokeStyle = '#1f2937';
                 this.ctx.lineWidth = 1;
 
                 if (isHorizontal) {
-                    // Gambar Grid Horizontal
                     for(let i = 0; i <= AppState.TOTAL_KEYS; i++) {
                         this.ctx.beginPath();
                         this.ctx.moveTo(0, i * keySize);
                         this.ctx.lineTo(width, i * keySize);
                         this.ctx.stroke();
                     }
-                    // Piano Hit Line (Kiri)
                     const hitLineX = width * 0.15;
                     this.ctx.fillStyle = '#1e293b';
                     this.ctx.fillRect(0, 0, hitLineX, height);
@@ -286,18 +331,14 @@
                     this.ctx.moveTo(hitLineX, 0);
                     this.ctx.lineTo(hitLineX, height);
                     this.ctx.stroke();
-
                     this._drawNotes(timeInSeconds, isHorizontal, keySize, pixelsPerSecond, hitLineX);
-
                 } else {
-                    // Gambar Grid Vertikal
                     for(let i = 0; i <= AppState.TOTAL_KEYS; i++) {
                         this.ctx.beginPath();
                         this.ctx.moveTo(i * keySize, 0);
                         this.ctx.lineTo(i * keySize, height);
                         this.ctx.stroke();
                     }
-                    // Piano Hit Line (Bawah)
                     const hitLineY = height - (height * 0.15);
                     this.ctx.fillStyle = '#1e293b';
                     this.ctx.fillRect(0, hitLineY, width, height * 0.15);
@@ -307,25 +348,43 @@
                     this.ctx.moveTo(0, hitLineY);
                     this.ctx.lineTo(width, hitLineY);
                     this.ctx.stroke();
-
                     this._drawNotes(timeInSeconds, isHorizontal, keySize, pixelsPerSecond, hitLineY);
                 }
 
+                this._drawParticles();
                 this._drawText(width, height);
+                this._drawWatermark(width, height);
+            },
+
+            _drawWaveformBackground(width, height) {
+                if (!AppState.visual_toggles.showWaveform || !AppState.analyser || !AppState.isPlaying) return;
+                
+                AppState.analyser.getByteFrequencyData(AppState.dataArray);
+                const barWidth = (width / AppState.dataArray.length) * 2;
+                let x = 0;
+                
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                for(let i = 0; i < AppState.dataArray.length; i++) {
+                    const val = AppState.dataArray[i];
+                    const percent = val / 255;
+                    const barHeight = height * 0.4 * percent;
+                    this.ctx.fillRect(x, (height / 2) - barHeight, barWidth - 1, barHeight * 2);
+                    x += barWidth;
+                }
             },
 
             _drawNotes(timeInSeconds, isHorizontal, keySize, pixelsPerSecond, hitLinePos) {
+                const frameDelta = 1 / AppState.fps;
+
                 AppState.parsedMidi.tracks.forEach((track, trackIndex) => {
                     if (!AppState.trackVisibility[trackIndex]) return;
 
                     const baseColor = AppState.trackColors[trackIndex];
                     const colorParts = baseColor.match(/\d+/g);
-                    this.ctx.fillStyle = `hsla(${colorParts[0]}, ${colorParts[1]}%, ${colorParts[2]}%, 0.85)`;
                     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
                     this.ctx.lineWidth = 1;
 
-                    // Mengatur Offset untuk efek tumpukan jika diaktifkan (3 pixel per track)
-                    // Digunakan agar jika not pada track yang berbeda persis bertumpuk, track di atasnya akan tergeser sedikitt.
+                    // FIXED: Layer offset hanya memengaruhi posisi lateral tuts, bukan posisi waktu (jatuh)
                     const layerOffset = AppState.layerNotes ? (trackIndex * 3) : 0; 
 
                     track.notes.forEach(note => {
@@ -336,42 +395,88 @@
                         let x, y, w, h;
 
                         if (isHorizontal) {
-                            // Hit Line di Kiri. Not bergerak dari kanan ke kiri.
                             const xStart = hitLinePos + (timeDiffStart * pixelsPerSecond);
                             const xEnd = hitLinePos + (timeDiffEnd * pixelsPerSecond);
                             
                             w = xEnd - xStart;
                             h = keySize - 2;
-                            // Tambahkan layerOffset agar not sedikit tergeser secara diagonal ke bawah/kanan
-                            x = xStart + layerOffset; 
+                            // x tetap mengikuti xStart agar waktu hit SINKRON. 
+                            // layerOffset hanya memengaruhi y (sumbu tuts).
+                            x = xStart; 
                             y = ((AppState.TOTAL_KEYS - 1 - keyIndex) * keySize) + layerOffset; 
                             
-                            if (x > this.canvas.width || xEnd < 0) return; // Culling
+                            if (x > this.canvas.width || xEnd < 0) return;
 
                         } else {
-                            // Hit Line di Bawah. Not bergerak dari atas ke bawah.
                             const yStart = hitLinePos - (timeDiffStart * pixelsPerSecond);
                             const yEnd = hitLinePos - (timeDiffEnd * pixelsPerSecond);
                             
                             w = keySize - 2;
                             h = yStart - yEnd;
-                            // Tambahkan layerOffset agar not sedikit tergeser secara diagonal ke kanan/atas
+                            // y tetap mengikuti yEnd agar waktu hit SINKRON.
+                            // layerOffset hanya memengaruhi x (sumbu tuts).
                             x = (keyIndex * keySize) + layerOffset; 
-                            y = yEnd - layerOffset; 
+                            y = yEnd; 
 
-                            if (y > this.canvas.height || yStart < 0) return; // Culling
+                            if (y > this.canvas.height || yStart < 0) return;
                         }
 
-                        // Menggambar Not
+                        let alpha = 0.85;
+                        if (AppState.visual_toggles.useVelocityColors && note.velocity !== undefined) {
+                            alpha = 0.3 + (note.velocity * 0.7);
+                        }
+                        this.ctx.fillStyle = `hsla(${colorParts[0]}, ${colorParts[1]}%, ${colorParts[2]}%, ${alpha})`;
+
+                        if (AppState.visual_toggles.enableNeonGlow) {
+                            this.ctx.shadowBlur = 15;
+                            this.ctx.shadowColor = `hsl(${colorParts[0]}, ${colorParts[1]}%, ${colorParts[2]}%)`;
+                        } else {
+                            this.ctx.shadowBlur = 0;
+                        }
+
                         this.ctx.fillRect(x + 1, y + 1, w, h);
                         this.ctx.strokeRect(x + 1, y + 1, w, h);
+                        this.ctx.shadowBlur = 0;
+
+                        if (AppState.visual_toggles.showParticles && timeDiffStart <= 0 && timeDiffStart > -frameDelta && !note._particleFired) {
+                            note._particleFired = true;
+                            let px = isHorizontal ? hitLinePos : x + (w / 2);
+                            let py = isHorizontal ? y + (h / 2) : hitLinePos;
+                            const pCount = 5 + Math.random() * 5;
+                            for (let i = 0; i < pCount; i++) {
+                                AppState.particles_pool.push({
+                                    x: px,
+                                    y: py,
+                                    vx: (Math.random() - 0.5) * (isHorizontal ? 2 : 8),
+                                    vy: (Math.random() - 0.5) * (isHorizontal ? 8 : 2),
+                                    life: 1.0,
+                                    color: `hsl(${colorParts[0]}, 100%, 70%)`
+                                });
+                            }
+                        }
                     });
                 });
             },
 
+            _drawParticles() {
+                if (!AppState.visual_toggles.showParticles || AppState.particles_pool.length === 0) return;
+                for (let i = AppState.particles_pool.length - 1; i >= 0; i--) {
+                    const p = AppState.particles_pool[i];
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = Math.max(0, p.life);
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= 0.05;
+                    if (p.life <= 0) AppState.particles_pool.splice(i, 1);
+                }
+                this.ctx.globalAlpha = 1.0;
+            },
+
             _drawText(width, height) {
                 if (!AppState.titleText && !AppState.subtitleText) return;
-
                 this.ctx.textAlign = 'right';
                 const paddingRight = width * 0.03;
                 let currentY = height * 0.08;
@@ -390,12 +495,40 @@
                     this.ctx.fillStyle = '#94a3b8';
                     this.ctx.fillText(AppState.subtitleText, width - paddingRight, currentY);
                 }
+            },
+
+            _drawWatermark(width, height) {
+                if (!AppState.visual_toggles.showWatermark || !AppState.watermark_image) return;
+                
+                const img = AppState.watermark_image;
+                
+                // FIXED: Membatasi logo ke bounding box kecil (64px di 1080p)
+                const maxDim = 64 * (height / 1080);
+                let drawW, drawH;
+                
+                // Menghitung aspek rasio agar tidak gepeng
+                const ratio = img.width / img.height;
+                if (ratio > 1) {
+                    drawW = maxDim;
+                    drawH = maxDim / ratio;
+                } else {
+                    drawH = maxDim;
+                    drawW = maxDim * ratio;
+                }
+
+                const paddingX = width * 0.02;
+                const paddingY = height * 0.02;
+                
+                this.ctx.globalAlpha = 0.6;
+                // Render logo di pojok kanan bawah
+                this.ctx.drawImage(img, width - drawW - paddingX, height - drawH - paddingY, drawW, drawH);
+                this.ctx.globalAlpha = 1.0;
             }
         };
 
         /**
          * ==========================================
-         * MODUL 4: EXPORTER (Manajemen FFmpeg & Rendering Video)
+         * MODUL 4: EXPORTER
          * ==========================================
          */
         const Exporter = {
@@ -403,12 +536,10 @@
 
             async loadFFmpeg() {
                 if (this.ffmpegInstance) return this.ffmpegInstance;
-                
                 return new Promise((resolve, reject) => {
                     Utils.log("Memuat engine FFmpeg dari CDN...", "warn");
                     const script = document.createElement('script');
                     script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-                    
                     script.onload = async () => {
                         try {
                             const { createFFmpeg } = FFmpeg;
@@ -438,9 +569,13 @@
 
             async startExport() {
                 if (!AppState.parsedMidi || !UI.elements.audioPlayer.src) return;
+                const warningMsg = "PERINGATAN: Ekspor video menggunakan teknik 'Frame-by-Frame Rendering'. Proses ini akan memakan beban CPU/GPU yang sangat tinggi secara intensif. Pastikan perangkat Anda terhubung ke daya dan tutup tab lain untuk mencegah kegagalan sistem atau overheating.";
+                if (!window.confirm(warningMsg)) return;
                 
                 try {
+                    UI.stopPlayback();
                     UI.setExportingState(true);
+                    Utils.resetNoteParticleFlags();
                     
                     const useFfmpeg = document.getElementById('use-ffmpeg').checked;
                     if (useFfmpeg) await this.loadFFmpeg();
@@ -462,20 +597,15 @@
                         error: (e) => Utils.log(`Encoder Error: ${e}`, "error")
                     });
 
-                    videoEncoder.configure({
-                        codec: 'vp09.00.10.08', width, height, bitrate: 5_000_000,
-                    });
+                    videoEncoder.configure({ codec: 'vp09.00.10.08', width, height, bitrate: 5_000_000 });
 
-                    // Loop Rendering
                     for (let i = 0; i < totalFrames; i++) {
                         if (AppState.cancelRequested) {
                             videoEncoder.close();
                             throw new Error("Dibatalkan oleh pengguna.");
                         }
-
                         const currentTime = i / fps;
                         Renderer.drawFrame(currentTime);
-                        
                         const frame = new VideoFrame(Renderer.canvas, { timestamp: (i * 1_000_000) / fps });
                         videoEncoder.encode(frame, { keyFrame: (i % fps === 0) });
                         frame.close();
@@ -484,9 +614,8 @@
                             const progress = ((i + 1) / totalFrames) * 100;
                             UI.elements.progressBar.style.width = `${progress}%`;
                             UI.elements.frameCounter.textContent = `Frame ${i + 1} / ${totalFrames}`;
-                            await new Promise(r => setTimeout(r, 0)); // Yield ke UI
+                            await new Promise(r => setTimeout(r, 0));
                         }
-
                         while (videoEncoder.encodeQueueSize > 10) {
                             if(AppState.cancelRequested) break;
                             await new Promise(r => setTimeout(r, 5));
@@ -494,8 +623,6 @@
                     }
 
                     if(AppState.cancelRequested) throw new Error("Dibatalkan oleh pengguna.");
-
-                    Utils.log("Menyimpan file video...");
                     await videoEncoder.flush();
                     muxer.finalize();
                     videoEncoder.close();
@@ -503,11 +630,7 @@
                     AppState.finalVideoBlob = new Blob([muxer.target.buffer], { type: 'video/webm' });
                     UI.showDownloadPanel(true, false);
                     
-                    if (useFfmpeg && this.ffmpegInstance) {
-                        await this._muxAudioAndVideo();
-                    } else {
-                        Utils.log("Proses Video selesai (Tanpa Audio).");
-                    }
+                    if (useFfmpeg && this.ffmpegInstance) await this._muxAudioAndVideo();
 
                 } catch (err) {
                     Utils.log(err.message, "warn");
@@ -523,12 +646,10 @@
                     UI.elements.progressStatus.textContent = "FFmpeg Audio Injection...";
                     UI.elements.progressBar.style.width = `0%`;
                     
-                    Utils.log("Mulai injeksi audio...");
                     if (!this.ffmpegInstance.isLoaded()) await this.ffmpegInstance.load();
 
                     const videoArray = new Uint8Array(await AppState.finalVideoBlob.arrayBuffer());
                     this.ffmpegInstance.FS('writeFile', 'v.webm', videoArray);
-                    
                     const audioFile = document.getElementById('audio-input').files[0];
                     const audioExt = audioFile.name.split('.').pop();
                     const audioArray = new Uint8Array(await audioFile.arrayBuffer());
@@ -538,22 +659,18 @@
                     
                     const data = this.ffmpegInstance.FS('readFile', 'out.mp4');
                     AppState.finalAudioVideoBlob = new Blob([data.buffer], { type: 'video/mp4' });
-                    
-                    Utils.log("Proses lengkap! Silakan unduh hasil.", "info");
                     UI.elements.dlStatusText.textContent = "✅ Proses Selesai Sepenuhnya!";
                     UI.elements.dlStatusText.className = "text-xs font-bold text-green-400 text-center";
                     UI.showDownloadPanel(true, true);
                 } catch (e) {
                     Utils.log(`FFmpeg Error: ${e.message}`, "error");
-                    UI.elements.dlStatusText.textContent = "⚠️ Muxing Audio Gagal!";
-                    UI.elements.dlStatusText.className = "text-xs font-bold text-red-400 text-center";
                 }
             }
         };
 
         /**
          * ==========================================
-         * MODUL 5: UI (Manajemen DOM dan Events)
+         * MODUL 5: UI
          * ==========================================
          */
         const UI = {
@@ -578,6 +695,25 @@
                 this.bindInputs();
                 this.bindControls();
                 this.bindConfig();
+                this.bindVisualToggles();
+            },
+
+            initAudioContext() {
+                if (!AppState.audioCtx) {
+                    try {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        AppState.audioCtx = new AudioContext();
+                        AppState.analyser = AppState.audioCtx.createAnalyser();
+                        AppState.analyser.fftSize = 256;
+                        const source = AppState.audioCtx.createMediaElementSource(this.elements.audioPlayer);
+                        source.connect(AppState.analyser);
+                        AppState.analyser.connect(AppState.audioCtx.destination);
+                        AppState.dataArray = new Uint8Array(AppState.analyser.frequencyBinCount);
+                    } catch (e) {
+                        Utils.log("Web Audio API gagal: " + e.message, "warn");
+                    }
+                }
+                if (AppState.audioCtx && AppState.audioCtx.state === 'suspended') AppState.audioCtx.resume();
             },
 
             bindInputs() {
@@ -585,17 +721,13 @@
                     const file = e.target.files[0];
                     if (!file) return;
                     try {
-                        Utils.log(`Membaca: ${file.name}`);
                         const arrayBuffer = await file.arrayBuffer();
                         AppState.parsedMidi = new Midi(arrayBuffer);
                         AppState.trackColors = Utils.generateColors(AppState.parsedMidi.tracks.length);
                         this.buildTrackUI();
-                        Utils.log(`Ditemukan ${AppState.parsedMidi.tracks.length} track.`, "info");
                         Utils.checkReadyStatus();
                         Renderer.drawFrame(0);
-                    } catch (err) {
-                        Utils.log(`Error Midi: ${err.message}`, "error");
-                    }
+                    } catch (err) { Utils.log(`Error Midi: ${err.message}`, "error"); }
                 });
 
                 document.getElementById('audio-input').addEventListener('change', (e) => {
@@ -603,7 +735,6 @@
                     if (!file) return;
                     this.elements.audioPlayer.src = URL.createObjectURL(file);
                     this.elements.audioPlayer.onloadedmetadata = () => {
-                        Utils.log(`Audio siap (${this.elements.audioPlayer.duration.toFixed(1)}s)`);
                         Utils.checkReadyStatus();
                     };
                 });
@@ -612,31 +743,21 @@
             buildTrackUI() {
                 AppState.trackVisibility = new Array(AppState.parsedMidi.tracks.length).fill(true);
                 this.elements.trackList.innerHTML = '';
-                
                 AppState.parsedMidi.tracks.forEach((track, idx) => {
-                    if(track.notes.length === 0) {
-                        AppState.trackVisibility[idx] = false;
-                        return;
-                    }
-
+                    if(track.notes.length === 0) { AppState.trackVisibility[idx] = false; return; }
                     const label = document.createElement('label');
                     label.className = "flex items-center space-x-2 cursor-pointer";
-                    
                     const cb = document.createElement('input');
-                    cb.type = "checkbox";
-                    cb.checked = true;
+                    cb.type = "checkbox"; cb.checked = true;
                     cb.className = "rounded border-slate-600 bg-slate-800 text-blue-500 accent-blue-500";
                     cb.onchange = (e) => {
                         AppState.trackVisibility[idx] = e.target.checked;
                         Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
                     };
-
                     const span = document.createElement('span');
                     const colorParts = AppState.trackColors[idx].match(/\d+/g);
                     span.innerHTML = `<span style="color: hsl(${colorParts[0]}, 100%, 70%)">■</span> ${track.name || `Track ${idx + 1}`} (${track.notes.length})`;
-
-                    label.appendChild(cb);
-                    label.appendChild(span);
+                    label.appendChild(cb); label.appendChild(span);
                     this.elements.trackList.appendChild(label);
                 });
                 this.elements.trackContainer.classList.remove('hidden');
@@ -647,25 +768,19 @@
                     AppState.resolution = parseInt(e.target.value);
                     Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
                 });
-                
                 document.getElementById('fps').addEventListener('change', (e) => AppState.fps = parseInt(e.target.value));
-                
                 document.getElementById('orientation').addEventListener('change', (e) => {
                     AppState.orientation = e.target.value;
                     Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
                 });
-
-                // Event listener untuk Toggle fitur layering not
                 document.getElementById('layer-notes').addEventListener('change', (e) => {
                     AppState.layerNotes = e.target.checked;
                     Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
                 });
-
                 document.getElementById('speed-slider').addEventListener('input', (e) => {
                     AppState.speed = parseInt(e.target.value);
                     Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
                 });
-
                 const syncText = () => {
                     AppState.titleText = document.getElementById('video-title').value.trim();
                     AppState.subtitleText = document.getElementById('video-subtitle').value.trim();
@@ -675,6 +790,46 @@
                 document.getElementById('video-subtitle').addEventListener('input', syncText);
             },
 
+            bindVisualToggles() {
+                const toggles = [
+                    { id: 'toggle-waveform', key: 'showWaveform' },
+                    { id: 'toggle-particles', key: 'showParticles' },
+                    { id: 'toggle-neon', key: 'enableNeonGlow' },
+                    { id: 'toggle-velocity', key: 'useVelocityColors' }
+                ];
+                toggles.forEach(t => {
+                    document.getElementById(t.id).addEventListener('change', (e) => {
+                        AppState.visual_toggles[t.key] = e.target.checked;
+                        Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                    });
+                });
+
+                const watermarkToggle = document.getElementById('toggle-watermark');
+                const watermarkInputContainer = document.getElementById('watermark-input-container');
+                const watermarkInput = document.getElementById('watermark-image-input');
+
+                watermarkToggle.addEventListener('change', (e) => {
+                    AppState.visual_toggles.showWatermark = e.target.checked;
+                    watermarkInputContainer.classList.toggle('hidden', !e.target.checked);
+                    Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                });
+
+                watermarkInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const img = new Image();
+                        img.onload = () => {
+                            AppState.watermark_image = img;
+                            if(AppState.visual_toggles.showWatermark) Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                        };
+                        img.src = URL.createObjectURL(file);
+                    } else {
+                        AppState.watermark_image = null;
+                        Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                    }
+                });
+            },
+
             bindControls() {
                 const loop = () => {
                     if (!AppState.isPlaying) return;
@@ -682,46 +837,33 @@
                     AppState.animationFrameId = requestAnimationFrame(loop);
                     if(this.elements.audioPlayer.ended) this.stopPlayback();
                 };
-
                 this.elements.btnPlay.addEventListener('click', () => {
                     if (!AppState.parsedMidi || !this.elements.audioPlayer.src) return;
+                    if (AppState.visual_toggles.showWaveform) this.initAudioContext();
+                    Utils.resetNoteParticleFlags();
                     AppState.isPlaying = true;
                     this.elements.btnPlay.disabled = true;
                     this.elements.btnStop.disabled = false;
                     this.elements.btnExport.disabled = true;
-                    this.elements.dlPanel.classList.add('hidden');
                     this.elements.audioPlayer.play();
                     loop();
                 });
-
                 this.elements.btnStop.addEventListener('click', () => this.stopPlayback());
-
                 this.elements.btnExport.addEventListener('click', () => Exporter.startExport());
-
                 this.elements.btnCancel.addEventListener('click', () => {
-                    if (AppState.isExporting) {
-                        AppState.cancelRequested = true;
-                        Utils.log("Membatalkan proses...", "warn");
-                        this.elements.btnCancel.disabled = true;
-                    }
+                    if (AppState.isExporting) { AppState.cancelRequested = true; this.elements.btnCancel.disabled = true; }
                 });
-
                 this.elements.btnDlVideo.addEventListener('click', () => {
                     if (!AppState.finalVideoBlob) return;
                     const url = URL.createObjectURL(AppState.finalVideoBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `MIDI_${AppState.orientation}_${AppState.resolution}p.webm`;
-                    a.click();
+                    const a = document.createElement('a'); a.href = url;
+                    a.download = `MIDI_${AppState.orientation}_${AppState.resolution}p.webm`; a.click();
                 });
-
                 this.elements.btnDlFull.addEventListener('click', () => {
                     if (!AppState.finalAudioVideoBlob) return;
                     const url = URL.createObjectURL(AppState.finalAudioVideoBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `MIDI_${AppState.orientation}_${AppState.resolution}p.mp4`;
-                    a.click();
+                    const a = document.createElement('a'); a.href = url;
+                    a.download = `MIDI_${AppState.orientation}_${AppState.resolution}p.mp4`; a.click();
                 });
             },
 
@@ -733,20 +875,19 @@
                 this.elements.audioPlayer.pause();
                 this.elements.audioPlayer.currentTime = 0;
                 if (AppState.animationFrameId) cancelAnimationFrame(AppState.animationFrameId);
+                Utils.resetNoteParticleFlags();
                 Renderer.drawFrame(0);
             },
 
             setExportingState(isExporting) {
                 AppState.isExporting = isExporting;
                 AppState.cancelRequested = false;
-                
                 if (isExporting) {
                     this.elements.btnPlay.disabled = true;
                     this.elements.btnExport.classList.add('hidden');
                     this.elements.btnCancel.classList.remove('hidden');
                     this.elements.btnCancel.disabled = false;
                     this.elements.dlPanel.classList.add('hidden');
-                    this.elements.btnDlFull.classList.add('hidden');
                     this.elements.progressBar.className = "h-full bg-purple-500 transition-all duration-300";
                     this.elements.progressStatus.textContent = "Render Video...";
                 } else {
@@ -766,9 +907,7 @@
             }
         };
 
-        // Inisialisasi Aplikasi
         UI.init();
-
     </script>
 </body>
 </html>
