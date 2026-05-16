@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIDI Visualizer Pro - Modular</title>
+    <title>MIDI Visualizer</title>
     <!-- Pastikan dependensi lokal ini ada di folder yang sama sesuai setup Anda sebelumnya -->
     <script src="tailwind.js"></script>
     <script src="Midi.js"></script>
@@ -28,7 +28,7 @@
        
         <div class="flex-1 overflow-y-auto p-4 space-y-4">
             <div class="p-4 border-b border-slate-700 shrink-0">
-                <h1 class="text-xl font-bold text-blue-400">MIDI Vis Pro</h1>
+                <h1 class="text-xl font-bold text-blue-400">MIDI Vis</h1>
                 <p class="text-xs text-slate-400 mt-1">Modular Architecture Edition</p>
             </div>
 
@@ -145,6 +145,12 @@
                 </div>
             </div>
 
+            <div id="download-panel" class="hidden p-3 bg-green-900/40 border border-green-700 rounded-md space-y-2">
+                <p id="dl-status-text" class="text-xs font-bold text-green-400 text-center">✅ Render Selesai!</p>
+                <button id="btn-dl-video" class="w-full py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded text-xs font-semibold">🎥 Unduh Video Saja</button>
+                <button id="btn-dl-full" class="w-full py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-semibold hidden">🎵 Unduh MP4 (Audio+Video)</button>
+            </div>
+
             <div class="space-y-2 border-t border-slate-700 pt-3 shrink-0">
                 <div class="flex gap-2">
                     <button id="btn-play" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-sm transition-colors disabled:opacity-50" disabled>▶ Mainkan</button>
@@ -155,12 +161,6 @@
                     <button id="btn-export" class="flex-1 py-2 mt-1 bg-purple-600 hover:bg-purple-700 rounded-md font-bold text-sm transition-colors disabled:opacity-50" disabled>🎬 Ekspor Video</button>
                     <button id="btn-cancel" class="hidden py-2 mt-1 px-4 bg-red-600 hover:bg-red-700 rounded-md font-bold text-sm transition-colors">Batal</button>
                 </div>
-            </div>
-
-            <div id="download-panel" class="hidden p-3 bg-green-900/40 border border-green-700 rounded-md space-y-2">
-                <p id="dl-status-text" class="text-xs font-bold text-green-400 text-center">✅ Render Selesai!</p>
-                <button id="btn-dl-video" class="w-full py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded text-xs font-semibold">🎥 Unduh Video Saja</button>
-                <button id="btn-dl-full" class="w-full py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-semibold hidden">🎵 Unduh MP4 (Audio+Video)</button>
             </div>
         </div>
 
@@ -223,6 +223,7 @@
             audioCtx: null,
             analyser: null,
             dataArray: null,
+            audioBuffer: null, // BARU: Untuk menyimpan raw audio buffer saat offline export
 
             MIN_MIDI: 21,
             MAX_MIDI: 108,
@@ -305,7 +306,8 @@
                 this.ctx.fillStyle = '#0a0a0a';
                 this.ctx.fillRect(0, 0, width, height);
 
-                this._drawWaveformBackground(width, height);
+                // Kirimkan timeInSeconds agar waveform offline bisa disinkronkan
+                this._drawWaveformBackground(width, height, timeInSeconds);
 
                 if (!AppState.parsedMidi) return;
 
@@ -356,16 +358,54 @@
                 this._drawWatermark(width, height);
             },
 
-            _drawWaveformBackground(width, height) {
-                if (!AppState.visual_toggles.showWaveform || !AppState.analyser || !AppState.isPlaying) return;
+            _drawWaveformBackground(width, height, timeInSeconds) {
+                if (!AppState.visual_toggles.showWaveform) return;
                 
-                AppState.analyser.getByteFrequencyData(AppState.dataArray);
+                // Jika sedang preview (Real-time Audio Node)
+                if (!AppState.isExporting && AppState.isPlaying && AppState.analyser) {
+                    AppState.analyser.getByteFrequencyData(AppState.dataArray);
+                } 
+                // Jika sedang export (Offline Buffer Slicing)
+                else if (AppState.isExporting && AppState.audioBuffer && AppState.dataArray) {
+                    const sampleRate = AppState.audioBuffer.sampleRate;
+                    const channelData = AppState.audioBuffer.getChannelData(0); // Gunakan mono channel
+                    
+                    const startIndex = Math.floor(timeInSeconds * sampleRate);
+                    const windowSize = Math.floor(sampleRate / AppState.fps); // Ambil rentang data untuk 1 frame (misal 1/30 detik)
+                    const endIndex = Math.min(startIndex + windowSize, channelData.length);
+                    
+                    const bins = AppState.dataArray.length; // Umumnya 128
+                    const samplesPerBin = Math.floor((endIndex - startIndex) / bins);
+                    
+                    if (samplesPerBin > 0) {
+                        for (let i = 0; i < bins; i++) {
+                            let sum = 0;
+                            const binStart = startIndex + (i * samplesPerBin);
+                            const binEnd = Math.min(binStart + samplesPerBin, channelData.length);
+                            
+                            // Menggunakan RMS (Root Mean Square) untuk mensimulasikan nilai frekuensi/amplitudo
+                            for (let j = binStart; j < binEnd; j++) {
+                                sum += channelData[j] * channelData[j];
+                            }
+                            const rms = Math.sqrt(sum / (binEnd - binStart));
+                            // Mengubah nilai rms (biasanya kecil, misal 0.1) ke skala 0-255 untuk visualizer
+                            AppState.dataArray[i] = Math.min(255, rms * 1500); 
+                        }
+                    } else {
+                        AppState.dataArray.fill(0); // Diam jika tidak ada data
+                    }
+                } else {
+                    return; // Lewati jika belum ada data sama sekali
+                }
+                
+                // Gambar data yang ada di AppState.dataArray
                 const barWidth = (width / AppState.dataArray.length) * 2;
                 let x = 0;
                 
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
                 for(let i = 0; i < AppState.dataArray.length; i++) {
                     const val = AppState.dataArray[i];
+                    //const val = AppState.dataArray[AppState.dataArray.length - 1 - i]; // Balik urutan untuk visual yang lebih intuitif (bass di bawah, treble di atas)
                     const percent = val / 255;
                     const barHeight = height * 0.4 * percent;
                     this.ctx.fillRect(x, (height / 2) - barHeight, barWidth - 1, barHeight * 2);
@@ -384,7 +424,6 @@
                     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
                     this.ctx.lineWidth = 1;
 
-                    // FIXED: Layer offset hanya memengaruhi posisi lateral tuts, bukan posisi waktu (jatuh)
                     const layerOffset = AppState.layerNotes ? (trackIndex * 3) : 0; 
 
                     track.notes.forEach(note => {
@@ -400,8 +439,6 @@
                             
                             w = xEnd - xStart;
                             h = keySize - 2;
-                            // x tetap mengikuti xStart agar waktu hit SINKRON. 
-                            // layerOffset hanya memengaruhi y (sumbu tuts).
                             x = xStart; 
                             y = ((AppState.TOTAL_KEYS - 1 - keyIndex) * keySize) + layerOffset; 
                             
@@ -413,8 +450,6 @@
                             
                             w = keySize - 2;
                             h = yStart - yEnd;
-                            // y tetap mengikuti yEnd agar waktu hit SINKRON.
-                            // layerOffset hanya memengaruhi x (sumbu tuts).
                             x = (keyIndex * keySize) + layerOffset; 
                             y = yEnd; 
 
@@ -502,11 +537,9 @@
                 
                 const img = AppState.watermark_image;
                 
-                // FIXED: Membatasi logo ke bounding box kecil (64px di 1080p)
                 const maxDim = 64 * (height / 1080);
                 let drawW, drawH;
                 
-                // Menghitung aspek rasio agar tidak gepeng
                 const ratio = img.width / img.height;
                 if (ratio > 1) {
                     drawW = maxDim;
@@ -520,7 +553,6 @@
                 const paddingY = height * 0.02;
                 
                 this.ctx.globalAlpha = 0.6;
-                // Render logo di pojok kanan bawah
                 this.ctx.drawImage(img, width - drawW - paddingX, height - drawH - paddingY, drawW, drawH);
                 this.ctx.globalAlpha = 1.0;
             }
@@ -605,7 +637,9 @@
                             throw new Error("Dibatalkan oleh pengguna.");
                         }
                         const currentTime = i / fps;
+                        // Time in seconds dimasukkan ke render frame untuk disinkronisasi ke visual audio
                         Renderer.drawFrame(currentTime);
+                        
                         const frame = new VideoFrame(Renderer.canvas, { timestamp: (i * 1_000_000) / fps });
                         videoEncoder.encode(frame, { keyFrame: (i % fps === 0) });
                         frame.close();
@@ -708,7 +742,10 @@
                         const source = AppState.audioCtx.createMediaElementSource(this.elements.audioPlayer);
                         source.connect(AppState.analyser);
                         AppState.analyser.connect(AppState.audioCtx.destination);
-                        AppState.dataArray = new Uint8Array(AppState.analyser.frequencyBinCount);
+                        
+                        if (!AppState.dataArray) {
+                            AppState.dataArray = new Uint8Array(AppState.analyser.frequencyBinCount);
+                        }
                     } catch (e) {
                         Utils.log("Web Audio API gagal: " + e.message, "warn");
                     }
@@ -730,13 +767,31 @@
                     } catch (err) { Utils.log(`Error Midi: ${err.message}`, "error"); }
                 });
 
-                document.getElementById('audio-input').addEventListener('change', (e) => {
+                document.getElementById('audio-input').addEventListener('change', async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
+                    
+                    // Untuk playback
                     this.elements.audioPlayer.src = URL.createObjectURL(file);
                     this.elements.audioPlayer.onloadedmetadata = () => {
                         Utils.checkReadyStatus();
                     };
+
+                    // Decode audio ke dalam AudioBuffer mentah untuk proses offline (export)
+                    try {
+                        Utils.log("Mendekode audio untuk persiapan ekspor...", "info");
+                        const arrayBuffer = await file.arrayBuffer();
+                        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        AppState.audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+                        
+                        // Pastikan array penampung data tersedia meskipun belum klik 'Play'
+                        if (!AppState.dataArray) {
+                            AppState.dataArray = new Uint8Array(128); // Standard size (256/2)
+                        }
+                        Utils.log("Audio berhasil didekode. Siap ekspor.", "info");
+                    } catch (err) {
+                        Utils.log(`Gagal mendekode audio: ${err.message}`, "error");
+                    }
                 });
             },
 
