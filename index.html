@@ -29,7 +29,7 @@
         <div class="flex-1 overflow-y-auto p-4 space-y-4">
             <div class="p-4 border-b border-slate-700 shrink-0">
                 <h1 class="text-xl font-bold text-blue-400">MIDI Vis</h1>
-                <p class="text-xs text-slate-400 mt-1">Direct Muxing Edition</p>
+                <p class="text-xs text-slate-400 mt-1">Direct Muxing & Subtitle Edition</p>
             </div>
 
             <div class="space-y-3">
@@ -90,16 +90,15 @@
 
                 <div class="space-y-2 mt-1">
                     <div>
-                        <input type="text" id="video-title" placeholder="Judul Video" class="w-full bg-slate-800 text-white rounded-md p-1.5 text-xs border border-slate-700 outline-none">
+                        <input type="text" id="video-title" placeholder="Judul Atas" class="w-full bg-slate-800 text-white rounded-md p-1.5 text-xs border border-slate-700 outline-none">
                     </div>
                     <div>
-                        <input type="text" id="video-subtitle" placeholder="Sub-judul" class="w-full bg-slate-800 text-white rounded-md p-1.5 text-xs border border-slate-700 outline-none">
+                        <input type="text" id="video-subtitle" placeholder="Sub-judul Atas" class="w-full bg-slate-800 text-white rounded-md p-1.5 text-xs border border-slate-700 outline-none">
                     </div>
                 </div>
                 
                 <div class="flex flex-col space-y-2 mt-2">
                     <div class="flex items-center space-x-2">
-                        <!-- ID diganti untuk menyesuaikan logika baru -->
                         <input type="checkbox" id="include-audio" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" checked>
                         <label for="include-audio" class="text-sm font-medium text-slate-300">Sertakan Audio (Fast WebM)</label>
                     </div>
@@ -117,12 +116,9 @@
 
             <!-- SECTION: Visual Effects -->
             <div class="space-y-2 border-t border-slate-700 pt-3">
-                <h4 class="text-xs font-bold text-emerald-400 mb-2 uppercase">Efek Visual (Experimental)</h4>
+                <h4 class="text-xs font-bold text-emerald-400 mb-2 uppercase">Efek Visual</h4>
                 <div class="flex flex-col space-y-2">
-                    <div class="flex items-center space-x-2">
-                        <input type="checkbox" id="toggle-waveform" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded">
-                        <label for="toggle-waveform" class="text-xs font-medium text-slate-300">Audio Waveform (WebAudio)</label>
-                    </div>
+                    <!-- Audio Waveform dihapus dari sini -->
                     <div class="flex items-center space-x-2">
                         <input type="checkbox" id="toggle-particles" class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" checked>
                         <label for="toggle-particles" class="text-xs font-medium text-slate-300">Ledakan Partikel (Burst)</label>
@@ -184,6 +180,53 @@
     <main class="flex-1 bg-black relative" id="canvas-container">
         <canvas id="visualizer-canvas" width="640" height="360"></canvas>
         <audio id="audio-player"></audio>
+
+        <!-- Tombol Buka Panel Subtitle -->
+        <button id="btn-toggle-sub" class="absolute bottom-4 right-4 z-40 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-full shadow-lg border border-slate-600 text-sm font-semibold flex items-center gap-2 transition-transform transform hover:scale-105">
+            💬 Edit Subtitle
+        </button>
+
+        <!-- Panel Subtitle -->
+        <div id="subtitle-panel" class="hidden absolute top-4 right-4 bottom-20 w-80 bg-slate-900/95 backdrop-blur-sm border border-slate-600 rounded-lg shadow-2xl flex flex-col z-50 overflow-hidden">
+            <div class="p-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center shrink-0">
+                <h3 class="font-bold text-sm text-blue-400">Teks / Komentar Video</h3>
+                <button id="btn-close-sub" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            
+            <div class="p-3 space-y-2 shrink-0 border-b border-slate-700">
+                <div class="w-full">
+                    <label class="block text-[10px] text-slate-400 mb-1">Waktu Mulai (detik)</label>
+                    <input type="number" id="sub-start" step="0.1" min="0" placeholder="0.0" class="w-full bg-slate-950 text-white rounded p-1.5 text-xs border border-slate-700 outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1">Teks Subtitle (Kosongkan untuk jeda)</label>
+                    <textarea id="sub-text" rows="2" class="w-full bg-slate-950 text-white rounded p-1.5 text-xs border border-slate-700 outline-none" placeholder="Tulis komentar/teks di sini..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-slate-400 mb-1">Ukuran Font</label>
+                    <select id="sub-size" class="w-full bg-slate-950 text-white rounded p-1.5 text-xs border border-slate-700 outline-none">
+                        <option value="0.03">Sangat Kecil</option>
+                        <option value="0.045">Kecil</option>
+                        <option value="0.06" selected>Sedang</option>
+                        <option value="0.09">Besar</option>
+                    </select>
+                </div>
+                <button id="btn-add-sub" class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-xs font-bold text-white transition-colors">
+                    + Tambahkan Teks
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-2" id="subtitle-list">
+                <!-- Daftar subtitle akan dirender di sini lewat JS -->
+                <p class="text-center text-xs text-slate-500 mt-4 italic">Belum ada subtitle.</p>
+            </div>
+
+            <div class="p-3 bg-slate-800 border-t border-slate-700 shrink-0">
+                <button id="btn-export-srt" class="w-full py-2 bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded text-xs font-bold text-white transition-colors flex items-center justify-center gap-2">
+                    📝 Ekspor file .SRT
+                </button>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -210,8 +253,12 @@
             titleText: '',
             subtitleText: '',
 
+            // Subtitle / Komentar video
+            subtitles: [], 
+            subtitleFontSize: 0.06,
+            postVideoStartTime: null, // Untuk timer fade to black
+
             visual_toggles: {
-                showWaveform: false,
                 showParticles: true,
                 enableNeonGlow: true,
                 useVelocityColors: true,
@@ -220,9 +267,6 @@
             watermark_image: null,
             particles_pool: [],
 
-            audioCtx: null,
-            analyser: null,
-            dataArray: null,
             audioBuffer: null, 
 
             MIN_MIDI: 21,
@@ -276,12 +320,21 @@
                     track.notes.forEach(note => { note._particleFired = false; });
                 });
                 AppState.particles_pool = [];
+            },
+
+            // Format waktu untuk file SRT (HH:MM:SS,MMM)
+            formatSRTTime(seconds) {
+                const hrs = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                const ms = Math.floor((seconds % 1) * 1000);
+                return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
             }
         };
 
         /**
          * ==========================================
-         * MODUL 3: RENDERER (Tidak banyak berubah dari sebelumnya)
+         * MODUL 3: RENDERER
          * ==========================================
          */
         const Renderer = {
@@ -302,10 +355,9 @@
                 const { width, height } = this.updateCanvasSize();
                 const isHorizontal = AppState.orientation === 'horizontal';
 
+                // Latar belakang hitam polos (Waveform telah dihapus)
                 this.ctx.fillStyle = '#0a0a0a';
                 this.ctx.fillRect(0, 0, width, height);
-
-                this._drawWaveformBackground(width, height, timeInSeconds);
 
                 if (!AppState.parsedMidi) return;
 
@@ -354,44 +406,15 @@
                 this._drawParticles();
                 this._drawText(width, height);
                 this._drawWatermark(width, height);
-            },
+                this._drawDynamicSubtitle(width, height, timeInSeconds);
 
-            _drawWaveformBackground(width, height, timeInSeconds) {
-                if (!AppState.visual_toggles.showWaveform) return;
-                if (!AppState.isExporting && AppState.isPlaying && AppState.analyser) {
-                    AppState.analyser.getByteFrequencyData(AppState.dataArray);
-                } 
-                else if (AppState.isExporting && AppState.audioBuffer && AppState.dataArray) {
-                    const sampleRate = AppState.audioBuffer.sampleRate;
-                    const channelData = AppState.audioBuffer.getChannelData(0); 
-                    const startIndex = Math.floor(timeInSeconds * sampleRate);
-                    const windowSize = Math.floor(sampleRate / AppState.fps); 
-                    const endIndex = Math.min(startIndex + windowSize, channelData.length);
-                    const bins = AppState.dataArray.length; 
-                    const samplesPerBin = Math.floor((endIndex - startIndex) / bins);
-                    if (samplesPerBin > 0) {
-                        for (let i = 0; i < bins; i++) {
-                            let sum = 0;
-                            const binStart = startIndex + (i * samplesPerBin);
-                            const binEnd = Math.min(binStart + samplesPerBin, channelData.length);
-                            for (let j = binStart; j < binEnd; j++) sum += channelData[j] * channelData[j];
-                            const rms = Math.sqrt(sum / (binEnd - binStart));
-                            AppState.dataArray[i] = Math.min(255, rms * 1500); 
-                        }
-                    } else {
-                        AppState.dataArray.fill(0);
-                    }
-                } else return; 
-                
-                const barWidth = (width / AppState.dataArray.length) * 2;
-                let x = 0;
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-                for(let i = 0; i < AppState.dataArray.length; i++) {
-                    const val = AppState.dataArray[i];
-                    const percent = val / 255;
-                    const barHeight = height * 0.4 * percent;
-                    this.ctx.fillRect(x, (height / 2) - barHeight, barWidth - 1, barHeight * 2);
-                    x += barWidth;
+                // Efek Fade to Black di akhir video
+                const audioDur = document.getElementById('audio-player').duration;
+                if (audioDur && timeInSeconds > audioDur) {
+                    const fadeProgress = (timeInSeconds - audioDur) / 5.0; // Transisi 5 detik
+                    const alpha = Math.min(1.0, fadeProgress);
+                    this.ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+                    this.ctx.fillRect(0, 0, width, height);
                 }
             },
 
@@ -488,6 +511,49 @@
                 }
             },
 
+            _drawDynamicSubtitle(width, height, timeInSeconds) {
+                if (AppState.subtitles.length === 0) return;
+
+                const audioDur = document.getElementById('audio-player').duration;
+                // Abaikan subtitle jika video sudah masuk fase Fade to Black
+                if (audioDur && timeInSeconds >= audioDur) return;
+
+                // Cari subtitle aktif (dengan batas max 5 detik jika tidak ada penerusnya)
+                let activeSub = null;
+                for (let i = 0; i < AppState.subtitles.length; i++) {
+                    const current = AppState.subtitles[i];
+                    const next = AppState.subtitles[i + 1];
+                    const end = next ? next.start : current.start + 5.0;
+
+                    if (timeInSeconds >= current.start && timeInSeconds < end) {
+                        activeSub = current;
+                        break;
+                    }
+                }
+
+                // Jangan render jika tidak ada subtitle aktif atau teksnya kosong (jeda)
+                if (!activeSub || !activeSub.text.trim()) return;
+
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'bottom';
+                
+                // Kalkulasi ukuran font dinamis sesuai setting
+                const fontSize = Math.max(12, Math.floor(height * AppState.subtitleFontSize));
+                this.ctx.font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
+                
+                const y = height * 0.92; // Posisi di bawah
+                const x = width / 2;
+
+                // Outline teks agar mudah dibaca di background apapun
+                this.ctx.lineWidth = Math.max(2, Math.floor(fontSize * 0.15));
+                this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.strokeText(activeSub.text, x, y);
+
+                // Warna isi teks
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillText(activeSub.text, x, y);
+            },
+
             _drawWatermark(width, height) {
                 if (!AppState.visual_toggles.showWatermark || !AppState.watermark_image) return;
                 const img = AppState.watermark_image;
@@ -521,7 +587,8 @@
                     
                     const includeAudio = document.getElementById('include-audio').checked;
                     const fps = AppState.fps;
-                    const duration = UI.elements.audioPlayer.duration;
+                    // Durasi video ditambah 5 detik untuk Fade out to Black
+                    const duration = UI.elements.audioPlayer.duration + 5.0; 
                     const totalFrames = Math.ceil(duration * fps);
                     const { width, height } = Renderer.updateCanvasSize();
 
@@ -534,7 +601,7 @@
                     let audioSampleRate = 44100;
                     let audioChannels = 2;
 
-                    // Konfigurasi Audio jika user meminta dan data buffer tersedia
+                    // Konfigurasi Audio
                     if (includeAudio && AppState.audioBuffer) {
                         audioSampleRate = AppState.audioBuffer.sampleRate;
                         audioChannels = AppState.audioBuffer.numberOfChannels;
@@ -611,7 +678,6 @@
                 }
             },
 
-            // Fungsi untuk memproses PCM ArrayBuffer menjadi Opus lewat WebCodecs
             async _processAudio(muxer, sampleRate, channels) {
                 return new Promise(async (resolve, reject) => {
                     Utils.log("Memulai proses encoding audio...", "info");
@@ -626,12 +692,12 @@
                         codec: 'opus',
                         sampleRate: sampleRate,
                         numberOfChannels: channels,
-                        bitrate: 128_000 // 128 kbps
+                        bitrate: 128_000 
                     });
 
                     const buffer = AppState.audioBuffer;
                     const length = buffer.length;
-                    const chunkSize = sampleRate; // Ambil 1 detik per chunk untuk diproses
+                    const chunkSize = sampleRate; 
 
                     for (let start = 0; start < length; start += chunkSize) {
                         if (AppState.cancelRequested) break;
@@ -639,7 +705,6 @@
                         const currentChunkSize = Math.min(chunkSize, length - start);
                         const timestamp = (start / sampleRate) * 1_000_000;
                         
-                        // Siapkan array planar (dibutuhkan WebCodecs untuk AudioData)
                         const planarData = new Float32Array(channels * currentChunkSize);
                         for (let c = 0; c < channels; c++) {
                             const channelData = buffer.getChannelData(c);
@@ -658,13 +723,12 @@
                         audioEncoder.encode(audioData);
                         audioData.close();
 
-                        // Animasi Progres Audio
                         const percent = Math.round((start / length) * 100);
                         UI.elements.progressBar.className = "h-full bg-emerald-500 transition-all duration-100";
                         UI.elements.progressBar.style.width = `${percent}%`;
                         UI.elements.frameCounter.textContent = `Audio ${percent}%`;
                         
-                        await new Promise(r => setTimeout(r, 0)); // Biarkan UI update
+                        await new Promise(r => setTimeout(r, 0)); 
 
                         while (audioEncoder.encodeQueueSize > 50) {
                             await new Promise(r => setTimeout(r, 5));
@@ -680,7 +744,7 @@
 
         /**
          * ==========================================
-         * MODUL 5: UI
+         * MODUL 5: UI & EVENTS
          * ==========================================
          */
         const UI = {
@@ -696,7 +760,15 @@
                 dlPanel: document.getElementById('download-panel'),
                 btnDlVideo: document.getElementById('btn-dl-video'),
                 trackList: document.getElementById('track-list'),
-                trackContainer: document.getElementById('track-container')
+                trackContainer: document.getElementById('track-container'),
+                
+                // Subtitle Elements
+                btnToggleSub: document.getElementById('btn-toggle-sub'),
+                btnCloseSub: document.getElementById('btn-close-sub'),
+                subPanel: document.getElementById('subtitle-panel'),
+                subList: document.getElementById('subtitle-list'),
+                btnAddSub: document.getElementById('btn-add-sub'),
+                btnExportSrt: document.getElementById('btn-export-srt')
             },
 
             init() {
@@ -704,27 +776,7 @@
                 this.bindControls();
                 this.bindConfig();
                 this.bindVisualToggles();
-            },
-
-            initAudioContext() {
-                if (!AppState.audioCtx) {
-                    try {
-                        const AudioContext = window.AudioContext || window.webkitAudioContext;
-                        AppState.audioCtx = new AudioContext();
-                        AppState.analyser = AppState.audioCtx.createAnalyser();
-                        AppState.analyser.fftSize = 256;
-                        const source = AppState.audioCtx.createMediaElementSource(this.elements.audioPlayer);
-                        source.connect(AppState.analyser);
-                        AppState.analyser.connect(AppState.audioCtx.destination);
-                        
-                        if (!AppState.dataArray) {
-                            AppState.dataArray = new Uint8Array(AppState.analyser.frequencyBinCount);
-                        }
-                    } catch (e) {
-                        Utils.log("Web Audio API gagal: " + e.message, "warn");
-                    }
-                }
-                if (AppState.audioCtx && AppState.audioCtx.state === 'suspended') AppState.audioCtx.resume();
+                this.bindSubtitleSystem();
             },
 
             bindInputs() {
@@ -753,10 +805,10 @@
                     try {
                         Utils.log("Mendekode audio untuk persiapan ekspor...", "info");
                         const arrayBuffer = await file.arrayBuffer();
+                        // AudioContext murni dipakai untuk decode buffer audio saja
                         const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
                         AppState.audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
                         
-                        if (!AppState.dataArray) AppState.dataArray = new Uint8Array(128); 
                         Utils.log("Audio berhasil didekode. Siap ekspor.", "info");
                         Utils.checkReadyStatus();
                     } catch (err) {
@@ -794,6 +846,7 @@
                 document.getElementById('orientation').addEventListener('change', (e) => { AppState.orientation = e.target.value; Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0); });
                 document.getElementById('layer-notes').addEventListener('change', (e) => { AppState.layerNotes = e.target.checked; Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0); });
                 document.getElementById('speed-slider').addEventListener('input', (e) => { AppState.speed = parseInt(e.target.value); Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0); });
+                document.getElementById('sub-size').addEventListener('change', (e) => { AppState.subtitleFontSize = parseFloat(e.target.value); Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0); });
                 const syncText = () => {
                     AppState.titleText = document.getElementById('video-title').value.trim();
                     AppState.subtitleText = document.getElementById('video-subtitle').value.trim();
@@ -805,7 +858,6 @@
 
             bindVisualToggles() {
                 const toggles = [
-                    { id: 'toggle-waveform', key: 'showWaveform' },
                     { id: 'toggle-particles', key: 'showParticles' },
                     { id: 'toggle-neon', key: 'enableNeonGlow' },
                     { id: 'toggle-velocity', key: 'useVelocityColors' }
@@ -840,16 +892,189 @@
                 });
             },
 
+            bindSubtitleSystem() {
+                // Buka/Tutup Panel
+                this.elements.btnToggleSub.addEventListener('click', () => {
+                    this.elements.subPanel.classList.toggle('hidden');
+                });
+                this.elements.btnCloseSub.addEventListener('click', () => {
+                    this.elements.subPanel.classList.add('hidden');
+                });
+
+                // Tambah Subtitle Baru
+                this.elements.btnAddSub.addEventListener('click', () => {
+                    const startStr = document.getElementById('sub-start').value;
+                    const text = document.getElementById('sub-text').value; // Boleh kosong
+
+                    if (!startStr) {
+                        alert("Harap isi waktu mulai.");
+                        return;
+                    }
+
+                    const start = parseFloat(startStr);
+
+                    // Jika ada subtitle di waktu yang sama persis, timpa/update teksnya
+                    const existingIdx = AppState.subtitles.findIndex(s => s.start === start);
+                    if (existingIdx !== -1) {
+                        AppState.subtitles[existingIdx].text = text;
+                    } else {
+                        AppState.subtitles.push({ start, text });
+                    }
+                    
+                    // Urutkan berdasarkan waktu mulai secara kronologis
+                    AppState.subtitles.sort((a, b) => a.start - b.start);
+                    
+                    // Kosongkan form teks untuk kemudahan input selanjutnya
+                    document.getElementById('sub-text').value = '';
+                    // Set default waktu mulai ke (waktu mulai yang barusan dimasukkan + 5 detik)
+                    document.getElementById('sub-start').value = start + 5.0; 
+
+                    this.renderSubtitleList();
+                    Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                });
+
+                // Ekspor ke .SRT
+                this.elements.btnExportSrt.addEventListener('click', () => {
+                    if (AppState.subtitles.length === 0) {
+                        alert("Tidak ada subtitle untuk diekspor.");
+                        return;
+                    }
+
+                    let srtContent = "";
+                    let srtIndex = 1;
+                    const audioDur = UI.elements.audioPlayer.duration;
+
+                    AppState.subtitles.forEach((sub, index) => {
+                        // Abaikan jeda/kosong dan abaikan subtitle yang berada di luar durasi video
+                        if (!sub.text.trim()) return;
+                        if (audioDur && sub.start >= audioDur) return;
+
+                        const nextSub = AppState.subtitles[index + 1];
+                        // Max durasi 5 detik jika tidak ada subtitle berikutnya
+                        let end = nextSub ? nextSub.start : sub.start + 5.0;
+                        
+                        // Potong durasi subtitle jika menabrak akhir video
+                        if (audioDur && end > audioDur) end = audioDur;
+
+                        if (sub.start >= end) return; // Failsafe jika waktu terlalu mepet
+
+                        const startTime = Utils.formatSRTTime(sub.start);
+                        const endTime = Utils.formatSRTTime(end);
+                        
+                        srtContent += `${srtIndex}\n${startTime} --> ${endTime}\n${sub.text}\n\n`;
+                        srtIndex++;
+                    });
+
+                    if (srtContent === "") {
+                        alert("Semua subtitle kosong atau di luar durasi, tidak ada yang diekspor.");
+                        return;
+                    }
+
+                    const blob = new Blob([srtContent], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "subtitle_video.srt";
+                    a.click();
+                });
+            },
+
+            renderSubtitleList() {
+                if (AppState.subtitles.length === 0) {
+                    this.elements.subList.innerHTML = '<p class="text-center text-xs text-slate-500 mt-4 italic">Belum ada subtitle.</p>';
+                    return;
+                }
+
+                this.elements.subList.innerHTML = '';
+                const rawDuration = UI.elements.audioPlayer.duration;
+                const maxDurationStr = (rawDuration && !isNaN(rawDuration)) ? rawDuration.toFixed(1) : '∞';
+
+                AppState.subtitles.forEach((sub, index) => {
+                    const nextSub = AppState.subtitles[index + 1];
+                    const end = nextSub ? nextSub.start : sub.start + 5.0;
+                    const endTimeDisplay = end.toFixed(1);
+
+                    const item = document.createElement('div');
+                    item.className = "flex justify-between items-start bg-slate-800 p-2 rounded mb-1 border border-slate-700 gap-2";
+                    
+                    const textContainer = document.createElement('div');
+                    textContainer.className = "flex-1 overflow-hidden";
+                    
+                    const time = document.createElement('div');
+                    time.className = "text-[10px] text-emerald-400 font-mono";
+                    time.textContent = `${sub.start.toFixed(1)}s - ${endTimeDisplay}s`;
+                    
+                    const text = document.createElement('div');
+                    text.className = "text-xs truncate";
+                    if (sub.text.trim() === '') {
+                        text.textContent = "(Kosong / Jeda Subtitle)";
+                        text.classList.add("text-slate-500", "italic");
+                    } else {
+                        text.textContent = sub.text;
+                        text.classList.add("text-slate-200");
+                    }
+
+                    textContainer.appendChild(time);
+                    textContainer.appendChild(text);
+
+                    const actionContainer = document.createElement('div');
+                    actionContainer.className = "flex space-x-1 shrink-0";
+
+                    const btnEdit = document.createElement('button');
+                    btnEdit.className = "text-blue-400 hover:text-blue-300 text-xs px-1";
+                    btnEdit.textContent = "✏️";
+                    btnEdit.title = "Edit Subtitle";
+                    btnEdit.onclick = () => {
+                        document.getElementById('sub-start').value = sub.start;
+                        document.getElementById('sub-text').value = sub.text;
+                    };
+
+                    const btnDel = document.createElement('button');
+                    btnDel.className = "text-red-400 hover:text-red-300 text-xs font-bold px-1";
+                    btnDel.textContent = "×";
+                    btnDel.title = "Hapus";
+                    btnDel.onclick = () => {
+                        AppState.subtitles.splice(index, 1);
+                        this.renderSubtitleList();
+                        Renderer.drawFrame(this.elements.audioPlayer.currentTime || 0);
+                    };
+
+                    actionContainer.appendChild(btnEdit);
+                    actionContainer.appendChild(btnDel);
+
+                    item.appendChild(textContainer);
+                    item.appendChild(actionContainer);
+                    this.elements.subList.appendChild(item);
+                });
+            },
+
             bindControls() {
-                const loop = () => {
+                const loop = (timestamp) => {
                     if (!AppState.isPlaying) return;
-                    Renderer.drawFrame(this.elements.audioPlayer.currentTime);
+                    
+                    let currentTime = this.elements.audioPlayer.currentTime;
+
+                    // Mengatur logika efek Fade To Black saat audioPlayer selesai
+                    if (this.elements.audioPlayer.ended) {
+                        if (!AppState.postVideoStartTime) AppState.postVideoStartTime = timestamp;
+                        const elapsedPost = (timestamp - AppState.postVideoStartTime) / 1000;
+                        currentTime = this.elements.audioPlayer.duration + elapsedPost;
+                        
+                        // Berhenti total setelah 5 detik fade to black
+                        if (elapsedPost >= 5.0) {
+                            this.stopPlayback();
+                            return;
+                        }
+                    } else {
+                        AppState.postVideoStartTime = null;
+                    }
+
+                    Renderer.drawFrame(currentTime);
                     AppState.animationFrameId = requestAnimationFrame(loop);
-                    if(this.elements.audioPlayer.ended) this.stopPlayback();
                 };
+                
                 this.elements.btnPlay.addEventListener('click', () => {
                     if (!AppState.parsedMidi || !this.elements.audioPlayer.src) return;
-                    if (AppState.visual_toggles.showWaveform) this.initAudioContext();
                     Utils.resetNoteParticleFlags();
                     AppState.isPlaying = true;
                     this.elements.btnPlay.disabled = true;
@@ -873,6 +1098,7 @@
 
             stopPlayback() {
                 AppState.isPlaying = false;
+                AppState.postVideoStartTime = null;
                 this.elements.btnPlay.disabled = false;
                 this.elements.btnStop.disabled = true;
                 this.elements.btnExport.disabled = false;
